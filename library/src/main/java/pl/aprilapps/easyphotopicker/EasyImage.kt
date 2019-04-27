@@ -28,25 +28,44 @@ class EasyImage private constructor(
         fun onCanceled(source: MediaSource)
     }
 
-    private fun getCallerActivity(caller: Any): Activity? = when (caller) {
-        is Activity -> caller
-        is Fragment -> caller.activity
-        is android.app.Fragment -> caller.activity
+    private interface CallerWrapper {
+
+        fun startActivityForResult(intent: Intent, requestCode: Int)
+
+    }
+
+    private fun getCallerActivity(caller: Any): CallerWrapper? = when (caller) {
+        is Activity -> object : CallerWrapper {
+            override fun startActivityForResult(intent: Intent, requestCode: Int) {
+                caller.startActivityForResult(intent, requestCode)
+            }
+        }
+        is Fragment -> object : CallerWrapper {
+            override fun startActivityForResult(intent: Intent, requestCode: Int) {
+                caller.startActivityForResult(intent, requestCode)
+            }
+        }
+        is android.app.Fragment -> object : CallerWrapper {
+            override fun startActivityForResult(intent: Intent, requestCode: Int) {
+                caller.startActivityForResult(intent, requestCode)
+            }
+        }
         else -> null
     }
 
     private fun startChooser(caller: Any) {
         cleanup()
-        getCallerActivity(caller)?.let { activity ->
+        getCallerActivity(caller)?.let { callerWrapper ->
             try {
                 lastCameraFile = Files.createCameraPictureFile(context)
                 val intent = Intents.createChooserIntent(
-                        context = activity,
+                        context = context,
                         chooserTitle = chooserTitle,
                         chooserType = chooserType,
                         cameraFileUri = lastCameraFile!!.uri,
                         allowMultiple = allowMultiple)
-                activity.startActivityForResult(intent, RequestCodes.PICK_PICTURE_FROM_CHOOSER)
+
+                callerWrapper.startActivityForResult(intent, RequestCodes.PICK_PICTURE_FROM_CHOOSER)
             } catch (error: IOException) {
                 error.printStackTrace()
                 cleanup()
@@ -72,12 +91,12 @@ class EasyImage private constructor(
 
     private fun startCameraForImage(caller: Any) {
         cleanup()
-        getCallerActivity(caller)?.let { activity ->
+        getCallerActivity(caller)?.let { callerWrapper ->
             lastCameraFile = Files.createCameraPictureFile(context)
-            val takePictureIntent = Intents.createCameraForImageIntent(activity, lastCameraFile!!.uri)
+            val takePictureIntent = Intents.createCameraForImageIntent(context, lastCameraFile!!.uri)
             val capableComponent = takePictureIntent.resolveActivity(context.packageManager)
                     ?.also {
-                        activity.startActivityForResult(takePictureIntent, RequestCodes.TAKE_PICTURE)
+                        callerWrapper.startActivityForResult(takePictureIntent, RequestCodes.TAKE_PICTURE)
                     }
 
             if (capableComponent == null) {
@@ -89,12 +108,12 @@ class EasyImage private constructor(
 
     private fun startCameraForVideo(caller: Any) {
         cleanup()
-        getCallerActivity(caller)?.let { activity ->
+        getCallerActivity(caller)?.let { callerWrapper ->
             lastCameraFile = Files.createCameraVideoFile(context)
-            val recordVideoIntent = Intents.createCameraForVideoIntent(activity, lastCameraFile!!.uri)
+            val recordVideoIntent = Intents.createCameraForVideoIntent(context, lastCameraFile!!.uri)
             val capableComponent = recordVideoIntent.resolveActivity(context.packageManager)
                     ?.also {
-                        activity.startActivityForResult(recordVideoIntent, RequestCodes.CAPTURE_VIDEO)
+                        callerWrapper.startActivityForResult(recordVideoIntent, RequestCodes.CAPTURE_VIDEO)
                     }
             if (capableComponent == null) {
                 Log.e(EASYIMAGE_LOG_TAG, "No app capable of handling camera intent")
